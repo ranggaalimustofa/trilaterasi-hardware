@@ -145,32 +145,27 @@ Proyek menggunakan struktur **PlatformIO multi-environment** — setiap perangka
 trilaterasi-esp32-lora/
 ├── platformio.ini              # Konfigurasi utama PlatformIO (semua environment)
 │
-├── anchor/
-│   ├── src/
-│   │   └── main.cpp            # Kode utama anchor
-│   └── include/
-│       └── config.h            # Konfigurasi anchor (ID, koordinat, pin LoRa)
-│
-├── node/
-│   ├── src/
-│   │   └── main.cpp            # Kode utama node mobile
-│   └── include/
-│       └── config.h            # Konfigurasi node
-│
-├── server/                     # (Opsional) ESP32 sebagai server trilaterasi
-│   ├── src/
-│   │   └── main.cpp
-│   └── include/
-│       ├── config.h
-│       └── trilateration.h     # Algoritma trilaterasi
-│
-├── lib/                        # Library lokal/custom (jika ada)
 ├── docs/
 │   ├── wiring_diagram.png
 │   └── system_overview.pdf
+│
+├── include/                    
+│   ├── anchor_config.h         # Konfigurasi anchor (pin, koordinat, LoRa)
+│   ├── tag_config.h            # Konfigurasi tag
+│   └── trilateration.h         # Algoritma trilaterasi (shared)
+│
+├── lib/                        # Library lokal/custom (jika ada)
+│
+├── src/
+│   ├── anchor/
+│   │   └── main.cpp            # Kode utama anchor
+│   └── tag/
+│       └── main.cpp            # Kode utama tag
+│
 ├── test/                       # Unit test (PlatformIO test runner)
 │   └── test_trilateration/
 │       └── test_main.cpp
+│
 ├── .gitignore
 ├── LICENSE
 └── README.md
