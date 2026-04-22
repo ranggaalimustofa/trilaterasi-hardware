@@ -1,4 +1,4 @@
-# 📡 Trilaterasi ESP32 + LoRa
+# 📡 Trilaterasi ESP32 + LoRa SX1278
 
 <div align="center">
 
@@ -26,13 +26,11 @@ Proyek ini mengimplementasikan sistem **trilaterasi** untuk menentukan posisi su
 
 ## ✨ Fitur
 
-- 📶 Komunikasi jarak jauh menggunakan modul LoRa (SX1276/SX1278)
-- 📍 Estimasi posisi 2D/3D menggunakan algoritma trilaterasi
+- 📶 Komunikasi jarak jauh menggunakan modul LoRa (SX1278)
+- 📍 Estimasi posisi 2D menggunakan algoritma trilaterasi
 - 🔁 Update posisi secara real-time
 - 📊 Logging data RSSI dan koordinat via Serial Monitor
-- 🌐 Visualisasi posisi opsional melalui Web Dashboard (ESP32 WebServer)
-- ⚙️ Konfigurasi parameter LoRa yang fleksibel (frekuensi, SF, BW)
-- 🔋 Mode hemat daya (Deep Sleep) untuk node baterai
+- 🌐 Visualisasi posisi opsional melalui Web Dashboard (Expess.js)
 
 ---
 
@@ -47,7 +45,7 @@ Proyek ini mengimplementasikan sistem **trilaterasi** untuk menentukan posisi su
                                │ RSSI → d1
               ┌────────────────┼────────────────┐
               │                │                │
-     ┌────────┴──────┐  ┌──────▼──────┐  ┌─────┴────────┐
+     ┌────────┴──────┐  ┌──────▼──────┐  ┌──────┴───────┐
      │   Anchor B    │  │   NODE      │  │   Anchor C   │
      │  ESP32+LoRa   │  │  ESP32+LoRa │  │  ESP32+LoRa  │
      │   (x2, y2)    │  │  (x?, y?)   │  │   (x3, y3)   │
@@ -58,20 +56,23 @@ Proyek ini mengimplementasikan sistem **trilaterasi** untuk menentukan posisi su
 ### Alur Kerja
 
 ```
-Node Broadcast ──► Anchor menerima sinyal
+Tag Broadcast ──► Anchor menerima sinyal
                         │
                         ▼
-               Hitung jarak dari RSSI
-               d = 10^((TxPower - RSSI) / (10 * n))
+                HTTP POST JSON ke Express.js (AnchorID, RSSI, d)
                         │
                         ▼
-               Kirim (AnchorID, RSSI, d) ke server
+                Hitung jarak dari RSSI
+                d = 10^((TxPower - RSSI) / (10 * n))
                         │
                         ▼
-               Trilaterasi → (x̂, ŷ) estimasi posisi
+                Trilaterasi → (x̂, ŷ) estimasi posisi
                         │
                         ▼
-               Tampilkan / Simpan hasil
+                SSE push ke browser real-time
+                        │
+                        ▼
+                Canvas map update posisi tag + trail
 ```
 
 ---
@@ -81,7 +82,7 @@ Node Broadcast ──► Anchor menerima sinyal
 | Komponen | Jumlah | Keterangan |
 |----------|--------|------------|
 | ESP32 Dev Board | 4+ | 3 anchor + 1 node mobile |
-| Modul LoRa SX1276/SX1278 | 4+ | Frekuensi 433/868/915 MHz |
+| Modul LoRa SX1278 | 4+ | Frekuensi 433/868/915 MHz |
 | Antena LoRa | 4+ | Sesuaikan dengan frekuensi |
 | Kabel jumper | Secukupnya | Female-to-male |
 | Breadboard / PCB | Sesuai kebutuhan | |
@@ -100,7 +101,7 @@ Node Broadcast ──► Anchor menerima sinyal
 | RST      | GPIO 14   |
 | DIO0     | GPIO 2    |
 
-> ⚠️ **Catatan**: Sesuaikan pin mapping di file `config.h` jika menggunakan pin berbeda.
+> ⚠️ **Catatan**: Sesuaikan pin mapping di file `lora_config.h` jika menggunakan pin berbeda.
 
 ---
 
@@ -133,8 +134,8 @@ Library di bawah ini sudah terdaftar di `platformio.ini` dan akan **diunduh otom
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/username/trilaterasi-esp32-lora.git
-cd trilaterasi-esp32-lora
+git clone https://github.com/ranggaalimustofa/ESP32-LoRa-Trilateration.git
+cd ESP32-LoRa-Trilateration
 ```
 
 ### 2. Struktur Direktori
@@ -142,7 +143,7 @@ cd trilaterasi-esp32-lora
 Proyek menggunakan struktur **PlatformIO multi-environment** — setiap perangkat (anchor/node) adalah environment terpisah dalam satu repository.
 
 ```
-trilaterasi-esp32-lora/
+ESP32-LoRa-Trilateration/
 ├── platformio.ini              # Konfigurasi utama PlatformIO (semua environment)
 │
 ├── docs/
@@ -173,107 +174,104 @@ trilaterasi-esp32-lora/
 
 ### 3. Konfigurasi `platformio.ini`
 
-File ini mendefinisikan semua environment (anchor, node, server) dalam satu proyek:
+File ini mendefinisikan semua environment (anchor dan tag) dalam satu proyek:
 
 ```ini
 [platformio]
-default_envs = anchor_1
+default_envs = anchor_1, anchor_2, anchor_3, tag_1
 
-; ─── Konfigurasi bersama ───────────────────────────────────────────────────
+; ─── Base: konfigurasi bersama ───────────────────────────────────────────────
 [env:base]
-platform  = espressif32
-board     = esp32dev
-framework = arduino
+platform      = espressif32
+framework     = arduino
 monitor_speed = 115200
 lib_deps =
     sandeepmistry/LoRa @ ^0.8.0
     bblanchon/ArduinoJson @ ^6.21.0
-    ; Hapus komentar jika menggunakan Web Dashboard:
-    ; me-no-dev/AsyncTCP @ ^1.1.1
-    ; me-no-dev/ESP Async WebServer @ ^1.2.3
 
-; ─── Anchor 1 ──────────────────────────────────────────────────────────────
+; ─── Anchor 1 — koordinat (0.0, 0.0) ────────────────────────────────────────
 [env:anchor_1]
 extends     = env:base
-src_dir     = anchor/src
+board       = az-delivery-devkit-v4
+build_src_filter = +<anchor/*> -<tag/*>
 build_flags =
-    -I anchor/include
     -D ANCHOR_ID=1
-    -D ANCHOR_X=0.0
-    -D ANCHOR_Y=0.0
+    -D ANCHOR_X=0.0f
+    -D ANCHOR_Y=0.0f
 
-; ─── Anchor 2 ──────────────────────────────────────────────────────────────
+; ─── Anchor 2 — koordinat (5.0, 0.0) ────────────────────────────────────────
 [env:anchor_2]
 extends     = env:base
-src_dir     = anchor/src
+board       = az-delivery-devkit-v4
+build_src_filter = +<anchor/*> -<tag/*>
 build_flags =
-    -I anchor/include
     -D ANCHOR_ID=2
-    -D ANCHOR_X=5.0
-    -D ANCHOR_Y=0.0
+    -D ANCHOR_X=5.0f
+    -D ANCHOR_Y=0.0f
 
-; ─── Anchor 3 ──────────────────────────────────────────────────────────────
+; ─── Anchor 3 — koordinat (2.5, 5.0) ────────────────────────────────────────
 [env:anchor_3]
 extends     = env:base
-src_dir     = anchor/src
+board       = az-delivery-devkit-v4
+build_src_filter = +<anchor/*> -<tag/*>
 build_flags =
-    -I anchor/include
     -D ANCHOR_ID=3
-    -D ANCHOR_X=2.5
-    -D ANCHOR_Y=5.0
+    -D ANCHOR_X=2.5f
+    -D ANCHOR_Y=5.0f
 
-; ─── Node Mobile ───────────────────────────────────────────────────────────
-[env:node]
+; ─── Tag 1 ───────────────────────────────────────────────────────────────────
+[env:tag_1]
 extends     = env:base
-src_dir     = node/src
+board       = esp32doit-devkit-v1
+build_src_filter = +<tag/*> -<anchor/*>
 build_flags =
-    -I node/include
-    -D NODE_ID=10
-
-; ─── Server (Opsional) ─────────────────────────────────────────────────────
-[env:server]
-extends     = env:base
-src_dir     = server/src
-build_flags =
-    -I server/include
-lib_deps =
-    ${env:base.lib_deps}
-    me-no-dev/AsyncTCP @ ^1.1.1
-    me-no-dev/ESP Async WebServer @ ^1.2.3
+    -D TAG_ID=1
 ```
 
 > 💡 **Keunggulan multi-environment**: Satu codebase untuk semua perangkat. Koordinat dan ID anchor dikonfigurasi langsung melalui `build_flags`, tidak perlu edit source code.
 
 ### 4. Konfigurasi per Perangkat (`config.h`)
 
-Edit file `anchor/include/config.h`:
+Edit file `include/lora_config.h`:
 
 ```cpp
-// Konfigurasi LoRa
-#define LORA_FREQ       433E6       // Frekuensi: 433E6 / 868E6 / 915E6
-#define LORA_SF         7           // Spreading Factor: 6-12
-#define LORA_BW         125E3       // Bandwidth: 7.8E3 - 500E3
-#define LORA_TX_POWER   17          // Daya transmisi (dBm)
+#pragma once
 
-// Pin ESP32
-#define LORA_SS         5
-#define LORA_RST        14
-#define LORA_DIO0       2
+// ─── Pin LoRa (ESP32) ────────────────────────────────────────────────────────
+#define LORA_SS 5   // NSS
+#define LORA_RST 14 // RST
+#define LORA_DIO0 2 // DIO0
 
-// Catatan: ANCHOR_ID, ANCHOR_X, ANCHOR_Y diinjeksi via build_flags di platformio.ini
-```
+// ─── Parameter LoRa ──────────────────────────────────────────────────────────
+#define LORA_FREQ 433E6     // Frekuensi: 433E6 / 868E6 / 915E6
+#define LORA_SF 7           // Spreading Factor (6–12)
+#define LORA_BW 125E3       // Bandwidth (Hz)
+#define LORA_TX_POWER 17    // Daya transmisi (dBm)
+#define LORA_SYNC_WORD 0x12 // Sync word — harus sama di semua perangkat
 
-Edit file `node/include/config.h`:
+// ─── Protokol Paket ──────────────────────────────────────────────────────────
+#define PKT_TYPE_TAG_BROADCAST 0x01
+#define PKT_TYPE_ANCHOR_REPORT 0x02
 
-```cpp
-#define BROADCAST_INTERVAL  1000    // Interval broadcast (ms)
+// ─── Serial ──────────────────────────────────────────────────────────────────
+#define SERIAL_BAUD 115200
 
-// Konfigurasi LoRa (harus sama persis dengan anchor)
-#define LORA_FREQ       433E6
-#define LORA_SF         7
-#define LORA_BW         125E3
+// ─── WiFi ────────────────────────────────────────────────────────────────────
+// Ganti dengan kredensial WiFi Anda
+#define WIFI_SSID      "Ram 16GB"
+#define WIFI_PASSWORD  "ranggaandfriends"
+ 
+// ─── HTTP Server ─────────────────────────────────────────────────────────────
+// Ganti SERVER_IP dengan IP laptop/PC yang menjalankan Python server
+// Cek IP PC Anda dengan: ipconfig (Windows) atau ip addr (Linux/Mac)
+#define SERVER_IP    "192.168.1.100"
+#define SERVER_PORT  5000
+#define SERVER_PATH  "/api/anchor-report"
+ 
+// Timeout HTTP request (ms)
+#define HTTP_TIMEOUT_MS  3000
 
-// Catatan: NODE_ID diinjeksi via build_flags di platformio.ini
+// Catatan: TAG_ID, ANCHOR_ID, ANCHOR_X, ANCHOR_Y diinjeksi via build_flags di platformio.ini
 ```
 
 ### 5. Build & Upload
@@ -291,7 +289,7 @@ pio run --environment anchor_1
 pio run --target upload --environment anchor_1
 pio run --target upload --environment anchor_2
 pio run --target upload --environment anchor_3
-pio run --target upload --environment node
+pio run --target upload --environment tag
 
 # Upload + langsung buka Serial Monitor
 pio run --target upload --environment anchor_1 && pio device monitor --environment anchor_1
@@ -319,7 +317,7 @@ pio device monitor --environment anchor_1 --baud 115200
 
 ### Penempatan Anchor
 
-Letakkan **minimal 3 anchor** dengan koordinat yang sudah diketahui:
+Letakkan **minimal 3 anchor** dengan koordinat yang sudah diketahui, misal:
 
 ```
 Anchor A: (0, 0)   ← pojok kiri bawah
@@ -348,14 +346,13 @@ Sebelum digunakan, lakukan kalibrasi untuk mendapatkan nilai **Path Loss Exponen
 ```
 Serial Monitor (115200 baud):
 
-[ANCHOR-1] Node-10 RSSI: -72 dBm | Jarak: 3.24 m
-[ANCHOR-2] Node-10 RSSI: -68 dBm | Jarak: 2.51 m  
-[ANCHOR-3] Node-10 RSSI: -79 dBm | Jarak: 4.87 m
+[ANCHOR-1] Tag=1 | Seq=983 | RSSI=-60 dBm | SNR=9 dB
+{"anchor":1,"tag":1,"seq":984,"tag_ts":985000,"anchor_ts":36497,"rssi":-60,"snr":9,"ax":0,"ay":0}
+[ANCHOR-2] Tag=1 | Seq=983 | RSSI=-60 dBm | SNR=9 dB
+{"anchor":2,"tag":1,"seq":984,"tag_ts":985000,"anchor_ts":36497,"rssi":-60,"snr":9,"ax":0,"ay":0}
+[ANCHOR-3] Tag=1 | Seq=983 | RSSI=-60 dBm | SNR=9 dB
+{"anchor":3,"tag":1,"seq":984,"tag_ts":985000,"anchor_ts":36497,"rssi":-60,"snr":9,"ax":0,"ay":0}
 
-[TRILATERASI] Estimasi posisi Node-10:
-  X: 2.43 m
-  Y: 1.87 m
-  Error estimasi: ±0.3 m
 ```
 
 ---
@@ -437,9 +434,9 @@ Proyek ini dilisensikan di bawah **MIT License** — lihat file [LICENSE](LICENS
 
 ## 👤 Kontak
 
-**Nama Anda** — [@username](https://github.com/username) — email@example.com
+**Rangga Ali Mustofa** — [@ranggaalimustofa](https://github.com/ranggaalimustofa)
 
-🔗 Link Proyek: [https://github.com/username/trilaterasi-esp32-lora](https://github.com/username/trilaterasi-esp32-lora)
+🔗 Link Proyek: [https://github.com/ranggaalimustofa/ESP32-LoRa-Trilateration](https://github.com/ranggaalimustofa/ESP32-LoRa-Trilateration)
 
 ---
 
