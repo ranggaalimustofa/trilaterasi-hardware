@@ -46,7 +46,7 @@ Proyek ini mengimplementasikan sistem **trilaterasi** untuk menentukan posisi su
               ┌────────────────┼────────────────┐
               │                │                │
      ┌────────┴──────┐  ┌──────▼──────┐  ┌──────┴───────┐
-     │   Anchor B    │  │   NODE      │  │   Anchor C   │
+     │   Anchor B    │  │   TAG       │  │   Anchor C   │
      │  ESP32+LoRa   │  │  ESP32+LoRa │  │  ESP32+LoRa  │
      │   (x2, y2)    │  │  (x?, y?)   │  │   (x3, y3)   │
      └───────────────┘  └─────────────┘  └──────────────┘
@@ -140,7 +140,7 @@ cd ESP32-LoRa-Trilateration
 
 ### 2. Struktur Direktori
 
-Proyek menggunakan struktur **PlatformIO multi-environment** — setiap perangkat (anchor/node) adalah environment terpisah dalam satu repository.
+Proyek menggunakan struktur **PlatformIO multi-environment** — setiap perangkat (anchor/tag) adalah environment terpisah dalam satu repository.
 
 ```
 ESP32-LoRa-Trilateration/
@@ -151,9 +151,8 @@ ESP32-LoRa-Trilateration/
 │   └── system_overview.pdf
 │
 ├── include/                    
-│   ├── anchor_config.h         # Konfigurasi anchor (pin, koordinat, LoRa)
-│   ├── tag_config.h            # Konfigurasi tag
-│   └── trilateration.h         # Algoritma trilaterasi (shared)
+│   ├── lora_config.h           # Konfigurasi anchor (pin, koordinat, LoRa)
+│   └── packet.h                # Struct payload
 │
 ├── lib/                        # Library lokal/custom (jika ada)
 │
@@ -394,7 +393,7 @@ x = (Aᵀ A)⁻¹ Aᵀ b
 | LoRa tidak terdeteksi | Wiring salah / modul rusak | Cek koneksi SPI dan pin |
 | RSSI tidak stabil | Interferensi / antena buruk | Ganti antena, pindah lokasi |
 | Posisi tidak akurat | Nilai `n` tidak terkalibrasi | Lakukan kalibrasi path loss |
-| Node tidak menerima data | Frekuensi/SF tidak sama | Samakan konfigurasi LoRa |
+| Tag tidak menerima data | Frekuensi/SF tidak sama | Samakan konfigurasi LoRa |
 | Upload gagal | Driver CH340/CP2102 belum ada | Install driver yang sesuai |
 | `Library not found` saat build | Cache PlatformIO korup | Jalankan `pio lib update` atau hapus folder `.pio/` |
 | Port COM tidak terdeteksi | Izin port di Linux/macOS | Jalankan `sudo usermod -aG dialout $USER` lalu logout |
