@@ -258,8 +258,8 @@ Edit file `include/lora_config.h`:
 
 // ─── WiFi ────────────────────────────────────────────────────────────────────
 // Ganti dengan kredensial WiFi Anda
-#define WIFI_SSID      "Ram 16GB"
-#define WIFI_PASSWORD  "ranggaandfriends"
+#define WIFI_SSID      "YOUR WIFI SSID"
+#define WIFI_PASSWORD  "YOUR WIFI PASSWORD"
  
 // ─── HTTP Server ─────────────────────────────────────────────────────────────
 // Ganti SERVER_IP dengan IP laptop/PC yang menjalankan Python server
